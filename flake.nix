@@ -15,6 +15,8 @@
           pkgs.jq
         ];
 
+        programs.fish.shellAliases.oc = "opencode";
+
         # This checkout is deliberately not managed by Home Manager: OpenCode
         # needs to write plugin dependencies and service state beside its config.
         home.activation.bootstrapOpenCodeConfig = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
