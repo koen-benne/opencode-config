@@ -17,24 +17,6 @@
   },
   "model": "bedrock/claude-sonnet-5",
   "small_model": "bonzai-openai/gpt-4.1-mini",
-  "agent": {
-    "build": {
-      "model": "bonzai-openai/gpt-5.6-sol"
-    },
-    "plan": {
-      "model": "bonzai-openai/gpt-5.6-sol"
-    },
-    "explore": {
-      "model": "bonzai-openai/gpt-4.1-mini"
-    },
-    "scout": {
-      "model": "bonzai-openai/gpt-4.1-mini",
-      "mode": "subagent"
-    },
-    "general": {
-      "model": "bonzai-openai/gpt-5.6-sol"
-    }
-  },
   "provider": {
     "bonzai-universal": {
       "name": "Bonzai Universal",
@@ -87,6 +69,321 @@
         "baseURL": "https://connect.iobonzai.com/v1"
       },
       "activation": "enabled"
+    }
+  },
+  "default_agent": "build",
+  "agents": {
+    "build": {
+      "mode": "primary",
+      "model": "bonzai-openai/gpt-5.6-sol",
+      "system": "Act as the implementation orchestrator and final decision-maker. For coding tasks, clarify the requirements and acceptance criteria, then execute the agreed plan by delegating implementation to the implementer subagent with a focused brief. Do not edit project files yourself, commit, push, reset, restore, checkout, clean, rebase, merge, cherry-pick, revert, or discard existing changes. Inspect the actual diff and test evidence, then delegate an independent review to the reviewer subagent. Triage the reviewer findings yourself: ignore unsupported or purely stylistic suggestions, but send actionable correctness, regression, security, or test issues back to the implementer and review the resulting diff again. If implementation reveals a meaningful architectural deviation or better alternative, pause and ask the human; do not decide that choice alone. Keep concise technical implementation decisions delegable and child-session details out of the main context except for concise final reports. Answer non-coding questions directly without unnecessary delegation.",
+      "permissions": [
+        {
+          "action": "edit",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "subagent",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "subagent",
+          "resource": "explore",
+          "effect": "allow"
+        },
+        {
+          "action": "subagent",
+          "resource": "implementer",
+          "effect": "allow"
+        },
+        {
+          "action": "subagent",
+          "resource": "reviewer",
+          "effect": "allow"
+        },
+        {
+          "action": "read",
+          "resource": "*.env",
+          "effect": "deny"
+        },
+        {
+          "action": "read",
+          "resource": "*.env.*",
+          "effect": "deny"
+        },
+        {
+          "action": "read",
+          "resource": "*.env.example",
+          "effect": "allow"
+        }
+      ]
+    },
+    "plan": {
+      "description": "Collaborative, read-only architecture planning with the human before implementation.",
+      "mode": "primary",
+      "model": "bonzai-openai/gpt-5.6-sol",
+      "system": "Collaborate with the human on architecture and product decisions before implementation. Surface viable options, tradeoffs, risks, and a recommendation, then ask the human to decide every meaningful architectural or product choice; never treat your own preference as final. Do not implement, edit project files, or delegate implementation. Read, research, and use only the explore subagent as needed. Keep concise technical implementation decisions delegable. Continue the conversation until the human has an agreed direction, then summarize the plan and open questions.",
+      "permissions": [
+        {
+          "action": "edit",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "shell",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "subagent",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "subagent",
+          "resource": "explore",
+          "effect": "allow"
+        }
+      ]
+    },
+    "explore": {
+      "model": "bonzai-openai/gpt-4.1-mini",
+      "mode": "subagent",
+      "permissions": [
+        {
+          "action": "*",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "read",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "glob",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "grep",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "skill",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "webfetch",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "websearch",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "read",
+          "resource": "*.env",
+          "effect": "deny"
+        },
+        {
+          "action": "read",
+          "resource": "*.env.*",
+          "effect": "deny"
+        },
+        {
+          "action": "read",
+          "resource": "*.env.example",
+          "effect": "allow"
+        }
+      ]
+    },
+    "implementer": {
+      "description": "Implements focused coding tasks, runs relevant tests, and reports the completed work to the orchestrator.",
+      "mode": "subagent",
+      "model": "bonzai-openai/gpt-5.6-luna#high",
+      "system": "Implement the agreed task in the shared workspace. Follow repository conventions and applicable instructions, inspect enough surrounding code to make a correct change, and run relevant tests or checks. Do not expand the scope without explaining why. Do not commit or push; do not reset, restore, checkout, clean, rebase, merge, cherry-pick, revert, or otherwise discard existing changes. Preserve unrelated work, and never expose secrets or credentials in output, diffs, or reports. If implementation reveals a meaningful architectural deviation or better alternative, stop and report it to the parent instead of deciding it alone. Finish with a concise report containing: files changed, implementation summary, important decisions or assumptions, tests run and their results, and unresolved risks or issues.",
+      "permissions": [
+        {
+          "action": "subagent",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "shell",
+          "resource": "git commit*",
+          "effect": "deny"
+        },
+        {
+          "action": "shell",
+          "resource": "git push*",
+          "effect": "deny"
+        },
+        {
+          "action": "shell",
+          "resource": "git reset*",
+          "effect": "deny"
+        },
+        {
+          "action": "shell",
+          "resource": "git restore*",
+          "effect": "deny"
+        },
+        {
+          "action": "shell",
+          "resource": "git checkout*",
+          "effect": "deny"
+        },
+        {
+          "action": "shell",
+          "resource": "git clean*",
+          "effect": "deny"
+        },
+        {
+          "action": "shell",
+          "resource": "git rebase*",
+          "effect": "deny"
+        },
+        {
+          "action": "shell",
+          "resource": "git merge*",
+          "effect": "deny"
+        },
+        {
+          "action": "shell",
+          "resource": "git cherry-pick*",
+          "effect": "deny"
+        },
+        {
+          "action": "shell",
+          "resource": "git revert*",
+          "effect": "deny"
+        },
+        {
+          "action": "shell",
+          "resource": "git stash*",
+          "effect": "deny"
+        },
+        {
+          "action": "read",
+          "resource": "*.env",
+          "effect": "deny"
+        },
+        {
+          "action": "read",
+          "resource": "*.env.*",
+          "effect": "deny"
+        },
+        {
+          "action": "read",
+          "resource": "*.env.example",
+          "effect": "allow"
+        }
+      ]
+    },
+    "reviewer": {
+      "description": "Independently reviews an implementation for requirement violations, bugs, regressions, security issues, and meaningful test gaps.",
+      "mode": "subagent",
+      "model": "bedrock/eu.anthropic.claude-opus-5-5#high",
+      "system": "Review the requested implementation independently. Inspect the actual git diff and relevant surrounding code. Prioritize requirement violations, correctness bugs, regressions, security problems, and meaningful missing tests. Report only actionable findings supported by concrete evidence, ordered by severity, with file and line references when possible. Do not edit files, run tests, use subagents, or make state-changing requests. Ignore style preferences, speculative edge cases, and optional refactors unless they affect correctness. Limit the report to the five most important findings and explicitly say when there are no findings.",
+      "permissions": [
+        {
+          "action": "*",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "read",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "glob",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "grep",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "shell",
+          "resource": "git status",
+          "effect": "allow"
+        },
+        {
+          "action": "shell",
+          "resource": "git status *",
+          "effect": "allow"
+        },
+        {
+          "action": "shell",
+          "resource": "git diff",
+          "effect": "allow"
+        },
+        {
+          "action": "shell",
+          "resource": "git diff --check",
+          "effect": "allow"
+        },
+        {
+          "action": "shell",
+          "resource": "git diff --stat",
+          "effect": "allow"
+        },
+        {
+          "action": "shell",
+          "resource": "git diff -- *",
+          "effect": "allow"
+        },
+        {
+          "action": "shell",
+          "resource": "git diff --cached",
+          "effect": "allow"
+        },
+        {
+          "action": "shell",
+          "resource": "git diff --cached -- *",
+          "effect": "allow"
+        },
+        {
+          "action": "skill",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "webfetch",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "websearch",
+          "resource": "*",
+          "effect": "allow"
+        },
+        {
+          "action": "read",
+          "resource": "*.env",
+          "effect": "deny"
+        },
+        {
+          "action": "read",
+          "resource": "*.env.*",
+          "effect": "deny"
+        },
+        {
+          "action": "read",
+          "resource": "*.env.example",
+          "effect": "allow"
+        }
+      ]
     }
   }
 }
