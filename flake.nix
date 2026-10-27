@@ -2,6 +2,28 @@
   description = "Personal OpenCode configuration";
 
   outputs = { self }: {
-    # The Home Manager module is added after this repository has a remote.
+    homeManagerModules.default = { config, lib, pkgs, ... }: {
+      home.packages = [ pkgs.opencode ];
+
+      # This checkout is deliberately not managed by Home Manager: OpenCode
+      # needs to write plugin dependencies and service state beside its config.
+      home.activation.bootstrapOpenCodeConfig = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        target="${config.home.homeDirectory}/.config/opencode"
+        repository="https://github.com/koen-benne/opencode-config.git"
+
+        if [ -d "$target/.git" ]; then
+          exit 0
+        fi
+
+        if [ -e "$target" ]; then
+          echo "OpenCode config exists but is not a Git checkout: $target" >&2
+          echo "Refusing to overwrite it." >&2
+          exit 1
+        fi
+
+        mkdir -p "$(dirname "$target")"
+        ${pkgs.git}/bin/git clone "$repository" "$target"
+      '';
+    };
   };
 }
