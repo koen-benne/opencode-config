@@ -2,13 +2,18 @@
   description = "Personal OpenCode configuration";
 
   outputs = { self }: {
-    homeManagerModules.default = { config, lib, pkgs, ... }: let
+    homeManagerModules.default = { config, inputs, lib, pkgs, ... }: let
       cfg = config.programs.opencodeConfig;
+      unstable = inputs.unstable.legacyPackages.${pkgs.system};
     in {
       options.programs.opencodeConfig.enable = lib.mkEnableOption "OpenCode and its writable configuration checkout";
 
       config = lib.mkIf cfg.enable {
-        home.packages = [ pkgs.opencode ];
+        home.packages = [
+          unstable.opencode
+          unstable.opencode-desktop
+          pkgs.jq
+        ];
 
         # This checkout is deliberately not managed by Home Manager: OpenCode
         # needs to write plugin dependencies and service state beside its config.
