@@ -1,0 +1,12 @@
+# OpenCode-managed plugin dependency state
+node_modules/
+package.json
+package-lock.json
+bun.lock
+
+# OpenCode-managed background-service state
+service.json
+
+# Local/editor state
+.DS_Store
+*.log
