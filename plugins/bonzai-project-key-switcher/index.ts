@@ -1,11 +1,12 @@
 import { Plugin } from "@opencode/plugin"
 
-type BillingConfig = {
+type BonzaiKeysConfig = {
   default: { apiKey: string }
   remotes: Record<string, { apiKey: string }>
 }
 
-const billingFile = `${process.env.HOME}/.config/opencode/billing.json`
+const keysFile = `${process.env.HOME}/.config/opencode/bonzai-keys.json`
+const providers = ["bonzai-universal", "bonzai-openai", "bedrock", "bonzai-vertex"]
 
 function normalizeRemote(remote: string): string {
   const trimmed = remote.trim().replace(/\.git$/, "")
@@ -17,12 +18,16 @@ function normalizeRemote(remote: string): string {
   return `${url.hostname}/${url.pathname.replace(/^\//, "")}`
 }
 
-async function keyForProject(directory: string): Promise<string | undefined> {
-  const file = Bun.file(billingFile)
-  if (!(await file.exists())) return undefined
+async function loadKeys(): Promise<BonzaiKeysConfig> {
+  const file = Bun.file(keysFile)
+  if (!(await file.exists())) throw new Error(`Bonzai key file not found: ${keysFile}`)
 
-  const config = (await file.json()) as BillingConfig
-  const fallback = config.default.apiKey || undefined
+  const config = (await file.json()) as BonzaiKeysConfig
+  if (!config.default?.apiKey) throw new Error("No default Bonzai API key configured in bonzai-keys.json")
+  return config
+}
+
+async function mappedKeyForProject(config: BonzaiKeysConfig, directory: string): Promise<string | undefined> {
   try {
     const process = Bun.spawn(["git", "-C", directory, "remote", "get-url", "origin"], {
       stdout: "pipe",
@@ -30,26 +35,35 @@ async function keyForProject(directory: string): Promise<string | undefined> {
     })
     const remote = await new Response(process.stdout).text()
 
-    if ((await process.exited) !== 0) return fallback
+    if ((await process.exited) !== 0) return undefined
 
-    const mapped = config.remotes[normalizeRemote(remote)]?.apiKey
-    return mapped || fallback
+    return config.remotes[normalizeRemote(remote)]?.apiKey || undefined
   } catch {
-    return fallback
+    return undefined
   }
 }
 
 export default Plugin.define({
   id: "bonzai-project-key-switcher",
   async setup(ctx: any) {
-    const key = await keyForProject(ctx.location.project.canonical)
+    const config = await loadKeys()
+    const defaultKey = config.default.apiKey
+
+    await ctx.provider.transform((editor: any) => {
+      for (const providerID of providers) {
+        editor.update(providerID, (provider: any) => {
+          provider.settings = { ...provider.settings, apiKey: defaultKey }
+        })
+      }
+    })
+
+    const key = await mappedKeyForProject(config, ctx.location.project.canonical)
     if (!key) return
 
-    const setAuthorization = (event: any) => {
-      event.headers.authorization = `Bearer ${key}`
+    for (const providerID of providers) {
+      await ctx.session.hook("http.request", (event: any) => {
+        event.request.headers.set("Authorization", `Bearer ${key}`)
+      }, { providerID })
     }
-
-    await ctx.session.hook("model.request", setAuthorization, { providerID: "bonzai" })
-    await ctx.session.hook("model.request", setAuthorization, { providerID: "bedrock" })
   },
 })
