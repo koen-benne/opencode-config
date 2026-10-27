@@ -1,0 +1,16 @@
+{
+  "default": {
+    "apiKey": "replace-with-the-stayokay-key"
+  },
+  "remotes": {
+    "ssh.dev.azure.com/v3/iodigital/iO%20Rotterdam%20-%20Stayokay/Stayokay-Code": {
+      "apiKey": "replace-with-the-stayokay-key"
+    },
+    "work-gitlab/KNMI/extranetten2.0/rails-backend": {
+      "apiKey": "replace-with-the-knmi-key"
+    },
+    "bitbucket.org/mangrove/zadkine": {
+      "apiKey": "replace-with-the-zadkine-key"
+    }
+  }
+}

@@ -7,6 +7,9 @@ bun.lock
 # OpenCode-managed background-service state
 service.json
 
+# Personal Bonzai billing mapping and API keys
+billing.json
+
 # Local/editor state
 .DS_Store
 *.log
