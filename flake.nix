@@ -2,28 +2,34 @@
   description = "Personal OpenCode configuration";
 
   outputs = { self }: {
-    homeManagerModules.default = { config, lib, pkgs, ... }: {
-      home.packages = [ pkgs.opencode ];
+    homeManagerModules.default = { config, lib, pkgs, ... }: let
+      cfg = config.programs.opencodeConfig;
+    in {
+      options.programs.opencodeConfig.enable = lib.mkEnableOption "OpenCode and its writable configuration checkout";
 
-      # This checkout is deliberately not managed by Home Manager: OpenCode
-      # needs to write plugin dependencies and service state beside its config.
-      home.activation.bootstrapOpenCodeConfig = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-        target="${config.home.homeDirectory}/.config/opencode"
-        repository="https://github.com/koen-benne/opencode-config.git"
+      config = lib.mkIf cfg.enable {
+        home.packages = [ pkgs.opencode ];
 
-        if [ -d "$target/.git" ]; then
-          exit 0
-        fi
+        # This checkout is deliberately not managed by Home Manager: OpenCode
+        # needs to write plugin dependencies and service state beside its config.
+        home.activation.bootstrapOpenCodeConfig = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+          target="${config.home.homeDirectory}/.config/opencode"
+          repository="https://github.com/koen-benne/opencode-config.git"
 
-        if [ -e "$target" ]; then
-          echo "OpenCode config exists but is not a Git checkout: $target" >&2
-          echo "Refusing to overwrite it." >&2
-          exit 1
-        fi
+          if [ -d "$target/.git" ]; then
+            exit 0
+          fi
 
-        mkdir -p "$(dirname "$target")"
-        ${pkgs.git}/bin/git clone "$repository" "$target"
-      '';
+          if [ -e "$target" ]; then
+            echo "OpenCode config exists but is not a Git checkout: $target" >&2
+            echo "Refusing to overwrite it." >&2
+            exit 1
+          fi
+
+          mkdir -p "$(dirname "$target")"
+          ${pkgs.git}/bin/git clone "$repository" "$target"
+        '';
+      };
     };
   };
 }
