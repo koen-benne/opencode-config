@@ -44,7 +44,14 @@ lock. Subject Markdown requires `#`, `## Goal`, `## Decision`, `## In scope`,
 `## Out of scope`, and `## Plans`. Plan Markdown requires `#`, `## Goal`,
 `## Context`, `## Decisions`, `## Plan`, `## Acceptance criteria`,
 `## Verification`, and `## Status`; `## Outcome` is optional. Approved body
-Markdown, including code blocks, remains the caller's content.
+Markdown, including Unicode content and code blocks, remains the caller's
+content byte-for-byte. Canonical validation rejects ASCII control characters
+and prose tabs; tabs are allowed only inside closed fences with matching
+delimiters. Basic blockquote/list fences and indented list-continuation fences
+are supported, while normal LF/CR line endings are preserved. After recording,
+the plan-recorder
+rereads the exact subject and plan to verify formatting, meaning, and the
+absence of unintended artifacts before reporting success.
 Updates and extensions require the revision returned by a fresh read, so stale
 sessions fail rather than overwrite newer work.
 

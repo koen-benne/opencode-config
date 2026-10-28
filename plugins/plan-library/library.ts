@@ -497,10 +497,10 @@ async function locateProject(root: string, directory: string): Promise<ProjectLo
 }
 
 function parseFrontmatter(content: string): { values: Record<string, string>; body: string; rawLines: string[] } {
-  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/)
+  const match = content.match(/^---(?:\r\n|\r|\n)([\s\S]*?)(?:\r\n|\r|\n)---(?:(?:\r\n|\r|\n))?/)
   if (!match) return { values: {}, body: content, rawLines: [] }
   const values: Record<string, string> = {}
-  const rawLines = match[1].split(/\r?\n/)
+  const rawLines = match[1].split(/\r\n|\r|\n/)
   for (const line of rawLines) {
     const parsed = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/)
     if (!parsed) continue
@@ -517,13 +517,142 @@ function yamlValue(value: string | number): string {
   return typeof value === "number" ? String(value) : JSON.stringify(value)
 }
 
+type Fence = { character: "`" | "~"; length: number; closePrefixes: string[]; contentPrefixes: string[]; container: boolean }
+
+function openingFence(line: string): Fence | undefined {
+  let position = 0
+  const leading = line.match(/^ */)?.[0] || ""
+  position = leading.length
+  let closePrefix = leading
+  let container = leading.length >= 4
+
+  while (position < line.length) {
+    const padding = line.slice(position).match(/^ */)?.[0] || ""
+    if (padding) {
+      if (!container || padding.length > 3) return undefined
+      position += padding.length
+      closePrefix += padding
+    }
+
+    if (line[position] === ">") {
+      container = true
+      position += 1
+      closePrefix += ">"
+      if (line[position] === " ") {
+        position += 1
+        closePrefix += " "
+      }
+      continue
+    }
+
+    const list = line.slice(position).match(/^(?:[-+*]|\d{1,9}[.)]) {1,4}/)
+    if (list) {
+      container = true
+      position += list[0].length
+      closePrefix += " ".repeat(list[0].length)
+      continue
+    }
+    break
+  }
+
+  const match = line.slice(position).match(/^(`{3,}|~{3,})(.*)$/)
+  if (!match) return undefined
+  if (match[1][0] === "`" && match[2].includes("`")) return undefined
+  const exactPrefix = line.slice(0, position)
+  const basePrefixes = container ? [exactPrefix, closePrefix] : [""]
+  const closePrefixes = basePrefixes.flatMap((prefix) => Array.from({ length: 4 }, (_, index) => `${prefix}${" ".repeat(index)}`))
+  const contentPrefixes = container
+    ? Array.from({ length: 4 }, (_, index) => `${closePrefix}${" ".repeat(index)}`)
+    : []
+  return {
+    character: match[1][0] as Fence["character"],
+    length: match[1].length,
+    closePrefixes: [...new Set(closePrefixes)],
+    contentPrefixes: [...new Set(contentPrefixes)],
+    container,
+  }
+}
+
+function closesFence(line: string, fence: Fence): boolean {
+  for (const prefix of fence.closePrefixes) {
+    if (!line.startsWith(prefix)) continue
+    const match = line.slice(prefix.length).match(/^([`~]+)[ \t]*$/)
+    if (!match || match[1].length < fence.length) continue
+    if (match[1].split("").every((character) => character === fence.character)) return true
+  }
+  return false
+}
+
+function isBlankMarkdownLine(line: string): boolean {
+  return /^[ \t]*$/.test(line)
+}
+
+function belongsToFenceContainer(line: string, fence: Fence): boolean {
+  return !fence.container || isBlankMarkdownLine(line) || fence.contentPrefixes.some((prefix) => line.startsWith(prefix)) || closesFence(line, fence)
+}
+
+function failUnexpectedTab(kind: "subject" | "plan", lineNumber: number): never {
+  fail(`${kind} content contains an unexpected tab character (U+0009) on line ${lineNumber}; tabs are allowed only inside fenced code blocks`)
+}
+
+function assertMarkdownControls(kind: "subject" | "plan", content: string): void {
+  let fence: Fence | undefined
+  let deferredTabLine: number | undefined
+  let position = 0
+  let lineNumber = 1
+
+  while (position <= content.length) {
+    let end = position
+    while (end < content.length && content[end] !== "\n" && content[end] !== "\r") end += 1
+    const line = content.slice(position, end)
+    if (fence && !belongsToFenceContainer(line, fence)) {
+      if (deferredTabLine !== undefined) failUnexpectedTab(kind, deferredTabLine)
+      fence = undefined
+    }
+    const inFence = fence !== undefined
+    for (let index = 0; index < line.length; index += 1) {
+      const code = line.charCodeAt(index)
+      if (code === 9 && inFence) {
+        deferredTabLine ??= lineNumber
+        continue
+      }
+      if ((code >= 0 && code <= 31) || code === 127) {
+        const value = `U+${code.toString(16).padStart(4, "0").toUpperCase()}`
+        if (code === 9) {
+          failUnexpectedTab(kind, lineNumber)
+        }
+        fail(`${kind} content contains an unexpected ASCII control character (${value}) on line ${lineNumber}`)
+      }
+    }
+
+    if (fence) {
+      if (closesFence(line, fence)) {
+        fence = undefined
+        deferredTabLine = undefined
+      }
+    } else {
+      fence = openingFence(line)
+    }
+
+    if (end === content.length) break
+    position = content[end] === "\r" && content[end + 1] === "\n" ? end + 2 : end + 1
+    lineNumber += 1
+  }
+
+  if (deferredTabLine !== undefined) {
+    failUnexpectedTab(kind, deferredTabLine)
+  }
+}
+
 function canonicalMarkdown(kind: "subject" | "plan", content: string, metadata: Record<string, string | number>): string {
   if (typeof content !== "string" || !content.trim()) fail(`${kind} content must not be empty`)
+  assertMarkdownControls(kind, content)
   const parsed = parseFrontmatter(content)
-  const body = parsed.body.endsWith("\n") ? parsed.body : `${parsed.body}\n`
+  const body = /(?:\r\n|\r|\n)$/.test(parsed.body) ? parsed.body : `${parsed.body}\n`
+  const lineStart = "(?:^|[\\r\\n])"
   const required = kind === "subject"
-    ? [/^#\s+\S/im, /^##\s+Goal\b/im, /^##\s+Decision\b/im, /^##\s+In scope\b/im, /^##\s+Out of scope\b/im, /^##\s+Plans\b/im]
-    : [/^#\s+\S/im, /^##\s+Goal\b/im, /^##\s+Context\b/im, /^##\s+Decisions\b/im, /^##\s+Plan\b/im, /^##\s+Acceptance criteria\b/im, /^##\s+Verification\b/im, /^##\s+Status\b/im]
+    ? [new RegExp(`${lineStart}#\\s+\\S`, "im"), new RegExp(`${lineStart}##\\s+Goal\\b`, "im"), new RegExp(`${lineStart}##\\s+Decision\\b`, "im"), new RegExp(`${lineStart}##\\s+In scope\\b`, "im"), new RegExp(`${lineStart}##\\s+Out of scope\\b`, "im"), new RegExp(`${lineStart}##\\s+Plans\\b`, "im")]
+    : [new RegExp(`${lineStart}#\\s+\\S`, "im"), new RegExp(`${lineStart}##\\s+Goal\\b`, "im"), new RegExp(`${lineStart}##\\s+Context\\b`, "im"), new RegExp(`${lineStart}##\\s+Decisions\\b`, "im"), new RegExp(`${lineStart}##\\s+Plan\\b`, "im"), new RegExp(`${lineStart}##\\s+Acceptance criteria\\b`, "im"), new RegExp(`${lineStart}##\\s+Verification\\b`, "im"), new RegExp(`${lineStart}##\\s+Status\\b`, "im")]
   if (required.some((pattern) => !pattern.test(body))) {
     fail(`${kind} content is missing required Markdown headings`)
   }

@@ -64,6 +64,148 @@ describe("plan library validation and identity", () => {
     expect(validateCanonicalMarkdown("plan", "# Missing sections\n")).toBe(false)
   })
 
+  test("rejects prose tabs and other ASCII controls without echoing the line", async () => {
+    const root = await temporaryDirectory("control-validation")
+    const project = await temporaryDirectory("control-project")
+    const sensitive = "Plan 001 \t6 with an internal marker"
+    const proseTab = plan.replace("- Preserve the approved scope.", `- ${sensitive}`)
+    let validationError: unknown
+    try {
+      await recordPlan({ root }, project, "ses-validation", {
+        decision: "create",
+        subjectSlug: "control-subject",
+        subjectContent: subject,
+        planAction: "new",
+        planSlug: "control-plan",
+        planContent: proseTab,
+      })
+    } catch (error) {
+      validationError = error
+    }
+    expect(String(validationError)).toMatch(/unexpected tab character.*line \d+/i)
+    expect(String(validationError)).not.toContain(sensitive)
+    expect(validateCanonicalMarkdown("plan", plan.replace("approved scope", "approved\u0001scope"))).toBe(false)
+    expect(validateCanonicalMarkdown("plan", plan.replace("approved scope", "approved\u007fscope"))).toBe(false)
+  })
+
+  test("accepts CRLF and tabs only inside correctly matched fenced code", () => {
+    const fenced = plan
+      .replace("```ts\nconst rich = true\n```", "````typescript info\nconst\trich = true\n```\nconst\tstill = true\n~~~~\n```\nconst\tbacktick = true\n````")
+      .replaceAll("\n", "\r\n")
+    expect(validateCanonicalMarkdown("plan", fenced)).toBe(true)
+    expect(validateCanonicalMarkdown("plan", fenced.replaceAll("\r\n", "\r"))).toBe(true)
+    expect(validateCanonicalMarkdown("plan", fenced.replace("~~~~\r\n", "~~~\r\n"))).toBe(true)
+    expect(validateCanonicalMarkdown("plan", fenced.replace("````\r\n", "```\r\n"))).toBe(false)
+    expect(validateCanonicalMarkdown("plan", fenced.replace("````typescript", "~~~typescript"))).toBe(true)
+    expect(validateCanonicalMarkdown("plan", fenced.replace("const\trich", "const\u0002rich"))).toBe(false)
+  })
+
+  test("does not treat invalid backtick info strings or prose as fenced code", () => {
+    const fakeBacktick = plan.replace("```ts\nconst rich = true", "```fake`info\nPlan 001 \t6")
+    const fakeList = plan.replace("```ts\nconst rich = true", "- ordinary prose\nPlan 001 \t6")
+    expect(validateCanonicalMarkdown("plan", fakeBacktick)).toBe(false)
+    expect(validateCanonicalMarkdown("plan", fakeList)).toBe(false)
+  })
+
+  test("accepts fenced code in blockquotes and list containers", () => {
+    const quotedList = plan.replace(
+      "```ts\nconst rich = true\n```",
+      "> - ```typescript\n>   const\trich = true\n>   ```",
+    )
+    const ordered = plan.replace(
+      "```ts\nconst rich = true\n```",
+      "1. ~~~typescript\n   const\tordered = true\n   ~~~",
+    )
+    const nested = plan.replace(
+      "```ts\nconst rich = true\n```",
+      "> - 1. ````typescript\n>      const\tnested = true\n>      ````",
+    )
+    expect(validateCanonicalMarkdown("plan", quotedList)).toBe(true)
+    expect(validateCanonicalMarkdown("plan", ordered)).toBe(true)
+    expect(validateCanonicalMarkdown("plan", nested)).toBe(true)
+  })
+
+  test("rejects tabs when list or blockquote fence content loses its container", () => {
+    const listBoundary = plan.replace(
+      "```ts\nconst rich = true\n```",
+      "- ```sh\n  const rich = true\nProse\toutside\n  ```",
+    )
+    const quoteBoundary = plan.replace(
+      "```ts\nconst rich = true\n```",
+      "> ```sh\n> const rich = true\nProse\toutside\n> ```",
+    )
+    const deferredBeforeBoundary = plan.replace(
+      "```ts\nconst rich = true\n```",
+      "- ```sh\n  const\trich = true\nProse\n  ```",
+    )
+    expect(validateCanonicalMarkdown("plan", listBoundary)).toBe(false)
+    expect(validateCanonicalMarkdown("plan", quoteBoundary)).toBe(false)
+    expect(validateCanonicalMarkdown("plan", deferredBeforeBoundary)).toBe(false)
+  })
+
+  test("accepts deeply indented nested list continuation fences", () => {
+    const continuation = plan.replace(
+      "```ts\nconst rich = true\n```",
+      "- outer\n    - inner\n        10. ~~~sh\n            const\tnested = true\n            ~~~",
+    )
+    expect(validateCanonicalMarkdown("plan", continuation)).toBe(true)
+  })
+
+  test("preserves Unicode body bytes through canonical record and read", async () => {
+    const root = await temporaryDirectory("unicode-round-trip")
+    const project = await temporaryDirectory("unicode-project")
+    const unicodeBody = "- Preserve em dash —, accented café, CJK 字, and emoji 🚀 exactly.\n"
+    const unicodePlan = plan.replace("- Preserve the approved scope.\n", unicodeBody)
+    await recordPlan({ root }, project, "ses-unicode", {
+      decision: "create",
+      subjectSlug: "unicode-subject",
+      subjectContent: subject,
+      planAction: "new",
+      planSlug: "unicode-plan",
+      planContent: unicodePlan,
+    })
+    const selected = await readPlan({ root }, project, "unicode-subject", 1, "unicode-plan")
+    const body = selected.plan.content.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n([\s\S]*)$/)?.[1]
+    expect(body).toBe(unicodePlan)
+    expect(body).toBeDefined()
+    expect(Buffer.from(body!)).toEqual(Buffer.from(unicodePlan))
+  })
+
+  test("rejects before recording and leaves the isolated repository clean", async () => {
+    const root = await temporaryDirectory("rejected-record")
+    const project = await temporaryDirectory("rejected-project")
+    await expect(recordPlan({ root }, project, "ses-rejected", {
+      decision: "create",
+      subjectSlug: "rejected-subject",
+      subjectContent: subject,
+      planAction: "new",
+      planSlug: "rejected-plan",
+      planContent: plan.replace("approved scope", "approved\u0003scope"),
+    })).rejects.toThrow(/unexpected ASCII control character.*line \d+/i)
+    expect(await git(root, "status", "--porcelain")).toBe("")
+    expect(await git(root, "rev-list", "--count", "HEAD")).toBe("1")
+    expect(await git(root, "ls-tree", "-r", "--name-only", "HEAD")).toBe(".gitignore\nREADME.md")
+    expect(await fs.readdir(path.join(root, "projects"))).toEqual([])
+  })
+
+  test("rejects an unclosed fenced tab before recording and leaves the repository clean", async () => {
+    const root = await temporaryDirectory("unclosed-fence-record")
+    const project = await temporaryDirectory("unclosed-fence-project")
+    const unclosed = plan.replace("```ts\nconst rich = true\n```", "```ts\nconst\trich = true")
+    await expect(recordPlan({ root }, project, "ses-unclosed", {
+      decision: "create",
+      subjectSlug: "unclosed-subject",
+      subjectContent: subject,
+      planAction: "new",
+      planSlug: "unclosed-plan",
+      planContent: unclosed,
+    })).rejects.toThrow(/unexpected tab character.*line \d+/i)
+    expect(await git(root, "status", "--porcelain")).toBe("")
+    expect(await git(root, "rev-list", "--count", "HEAD")).toBe("1")
+    expect(await git(root, "ls-tree", "-r", "--name-only", "HEAD")).toBe(".gitignore\nREADME.md")
+    expect(await fs.readdir(path.join(root, "projects"))).toEqual([])
+  })
+
   test("derives stable, collision-resistant identities", async () => {
     const first = await temporaryDirectory("same-name-a")
     const second = await temporaryDirectory("same-name-b")

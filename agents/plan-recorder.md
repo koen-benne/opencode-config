@@ -28,6 +28,11 @@ other agents. Format the approved material as canonical Markdown with the
 required subject headings (`#`, `## Goal`, `## Decision`, `## In scope`,
 `## Out of scope`, `## Plans`) and plan headings (`#`, `## Goal`, `## Context`,
 `## Decisions`, `## Plan`, `## Acceptance criteria`, `## Verification`,
-`## Status`); preserve rich Markdown and code blocks. For updates, use
-the revision returned by a fresh read. Return the recorded relative paths and
-commit hash, or a concise error/inconsistency report.
+`## Status`); preserve rich Markdown and code blocks; use tabs only inside
+correctly closed, matching fenced code blocks, never in prose. For updates, use
+the revision returned by a fresh read. After every successful record, reread
+the exact subject and plan and verify that the formatted content preserves the
+approved meaning and contains no unintended artifacts before reporting success.
+If record validation fails, correct only formatting from the approved source or
+report an inconsistency; never invent content. Return the recorded relative
+paths and commit hash, or a concise error/inconsistency report.
