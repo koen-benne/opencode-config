@@ -2,7 +2,25 @@
   "$schema": "https://opencode.ai/config.json",
   "plugins": [
     "./plugins/bonzai-project-key-switcher",
-    "./plugins/bonzai-model-catalog"
+    "./plugins/bonzai-model-catalog",
+    "./plugins/plan-library"
+  ],
+  "permissions": [
+    {
+      "action": "plan-library_list",
+      "resource": "*",
+      "effect": "deny"
+    },
+    {
+      "action": "plan-library_read",
+      "resource": "*",
+      "effect": "deny"
+    },
+    {
+      "action": "plan-library_record",
+      "resource": "*",
+      "effect": "deny"
+    }
   ],
   "autoupdate": false,
   "lsp": {
