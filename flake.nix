@@ -20,17 +20,15 @@
         repository="ssh://git@github.com:22/koen-benne/opencode-config.git"
 
         if [ -d "$target/.git" ]; then
-          exit 0
-        fi
-
-        if [ -e "$target" ]; then
+          :
+        elif [ -e "$target" ]; then
           echo "OpenCode config exists but is not a Git checkout: $target" >&2
           echo "Refusing to overwrite it." >&2
           exit 1
+        else
+          mkdir -p "$(dirname "$target")"
+          ${pkgs.git}/bin/git clone "$repository" "$target"
         fi
-
-        mkdir -p "$(dirname "$target")"
-        ${pkgs.git}/bin/git clone "$repository" "$target"
       '';
     };
   };
