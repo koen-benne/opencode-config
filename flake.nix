@@ -24,7 +24,7 @@
         # needs to write plugin dependencies and service state beside its config.
         home.activation.bootstrapOpenCodeConfig = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
           target="${config.home.homeDirectory}/.config/opencode"
-          repository="ssh://git@github.com:22/koen-benne/opencode-config.git"
+          repository="https://github.com/koen-benne/opencode-config.git"
 
           if [ -d "$target/.git" ]; then
             :
@@ -34,7 +34,7 @@
             exit 1
           else
             run ${pkgs.coreutils}/bin/mkdir -p "$(dirname "$target")"
-            run ${pkgs.coreutils}/bin/env GIT_SSH_COMMAND="${pkgs.openssh}/bin/ssh" ${pkgs.git}/bin/git clone "$repository" "$target"
+            run ${pkgs.git}/bin/git clone "$repository" "$target"
           fi
         '';
       };
