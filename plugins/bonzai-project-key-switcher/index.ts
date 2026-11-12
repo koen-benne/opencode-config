@@ -27,7 +27,7 @@ async function loadKeys(): Promise<BonzaiKeysConfig> {
   return config
 }
 
-async function mappedKeyForProject(config: BonzaiKeysConfig, directory: string): Promise<string | undefined> {
+async function keyForProject(config: BonzaiKeysConfig, directory: string): Promise<string> {
   try {
     const process = Bun.spawn(["git", "-C", directory, "remote", "get-url", "origin"], {
       stdout: "pipe",
@@ -35,11 +35,11 @@ async function mappedKeyForProject(config: BonzaiKeysConfig, directory: string):
     })
     const remote = await new Response(process.stdout).text()
 
-    if ((await process.exited) !== 0) return undefined
+    if ((await process.exited) !== 0) return config.default.apiKey
 
-    return config.remotes[normalizeRemote(remote)]?.apiKey || undefined
+    return config.remotes[normalizeRemote(remote)]?.apiKey || config.default.apiKey
   } catch {
-    return undefined
+    return config.default.apiKey
   }
 }
 
@@ -57,8 +57,7 @@ export default Plugin.define({
       }
     })
 
-    const key = await mappedKeyForProject(config, ctx.location.project.canonical)
-    if (!key) return
+    const key = await keyForProject(config, ctx.location.project.canonical)
 
     for (const providerID of providers) {
       await ctx.session.hook("http.request", (event: any) => {
