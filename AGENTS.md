@@ -26,3 +26,17 @@
   allowed subject to project guidance.
 - Preserve unrelated files and existing staged or unstaged work. Never inspect
   or print secrets, and do not stage unrelated files.
+
+# Git and commit history
+
+- Follow Kent Beck's Tidy First approach: separate structural/tidying commits
+  from behavioral changes, plan clean final commit boundaries from the start,
+  and prefer small, coherent commits with a readable history.
+- Use commit messages in the format `type(scope): Sentence case explanation`,
+  with suitable Conventional Commit types such as `feat`, `fix`, `refactor`,
+  `chore`, `test`, `docs`, `build`, `ci`, and `perf`.
+- Create ordinary commits only with explicit user approval. Never amend,
+  squash, rebase, or force-push. Proactively recommend appropriate amend or
+  squash cleanup when useful, and explain how the user can perform it in
+  LazyGit.
+- Preserve unrelated working-tree changes.
