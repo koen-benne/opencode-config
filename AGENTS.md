@@ -27,6 +27,25 @@
 - Preserve unrelated files and existing staged or unstaged work. Never inspect
   or print secrets, and do not stage unrelated files.
 
+# Worktrees
+
+- Never create a worktree without explicit human approval. Avoid worktrees for
+  small tasks unless requested. An approved plan under `~/.opencode/plan`
+  normally merits a dedicated worktree, but still requires explicit approval.
+- The only creation path is a literal invocation of the executable
+  `/home/koenbenne/.config/opencode/bin/create-worktree`; wrappers, alternate
+  spellings, native `worktree_create`, direct `git worktree` creation, and
+  other bypasses are denied. The script's OpenCode `ask` permission is the
+  approval gate.
+- Persistent worktrees use
+  `/home/koenbenne/work/worktrees/<repo>/<branch-slug>`. Use `/tmp` only for
+  explicitly disposable work. After creation, move the session into the new
+  worktree.
+- Preserve or stop services before worktree operations. Cleanup requires
+  explicit human approval after services are stopped. Permission rules are
+  ordered and the last matching rule wins; keep all deny rules ahead of the
+  final exact-script `ask` rule.
+
 # Git and commit history
 
 - Follow Kent Beck's Tidy First approach: separate structural/tidying commits

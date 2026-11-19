@@ -20,6 +20,21 @@
       "action": "plan-library_record",
       "resource": "*",
       "effect": "deny"
+    },
+    {
+      "action": "shell",
+      "resource": "*git*worktree*",
+      "effect": "deny"
+    },
+    {
+      "action": "shell",
+      "resource": "*create-worktree*",
+      "effect": "deny"
+    },
+    {
+      "action": "shell",
+      "resource": "/home/koenbenne/.config/opencode/bin/create-worktree *",
+      "effect": "ask"
     }
   ],
   "autoupdate": false,

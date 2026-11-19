@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly WORKTREE_ROOT=/home/koenbenne/work/worktrees
+
+usage() {
+  cat <<'EOF'
+Usage: create-worktree --branch BRANCH --base BASE
+
+Create a linked worktree for the current Git repository under:
+  /home/koenbenne/work/worktrees/<repo>/<branch-slug>
+
+Options:
+  --branch BRANCH  New local branch name (required)
+  --base BASE      Existing commit-ish to start the branch from (required)
+  -h, --help       Show this help
+EOF
+}
+
+die() {
+  printf 'create-worktree: %s\n' "$1" >&2
+  exit 2
+}
+
+branch=''
+base=''
+
+# Parse arguments.
+while (($# > 0)); do
+  case $1 in
+    --branch)
+      (($# >= 2)) || die '--branch requires a value'
+      [[ -z "$branch" ]] || die '--branch was specified more than once'
+      branch=$2
+      shift 2
+      ;;
+    --base)
+      (($# >= 2)) || die '--base requires a value'
+      [[ -z "$base" ]] || die '--base was specified more than once'
+      base=$2
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      die "unknown argument: $1"
+      ;;
+  esac
+done
+
+# Validate required inputs and dependencies.
+[[ -n "$branch" ]] || die '--branch is required'
+[[ -n "$base" ]] || die '--base is required'
+command -v git >/dev/null 2>&1 || die 'git is required'
+
+# Discover and canonicalize the repository.
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || die 'current directory is not inside a Git worktree'
+repo_root=$(cd -- "$repo_root" && pwd -P) || die 'could not canonicalize the Git worktree'
+[[ $(git -C "$repo_root" rev-parse --is-inside-work-tree 2>/dev/null) == true ]] || die 'current repository is not a worktree'
+
+common_git_dir=$(git -C "$repo_root" rev-parse --git-common-dir 2>/dev/null) || die 'could not locate the common Git directory'
+if [[ $common_git_dir != /* ]]; then
+  common_git_dir=$repo_root/$common_git_dir
+fi
+common_git_dir=$(cd -- "$common_git_dir" && pwd -P) || die 'common Git directory does not exist'
+repo_identity_root=$repo_root
+if [[ $(basename -- "$common_git_dir") == .git ]]; then
+  repo_identity_root=$(dirname -- "$common_git_dir")
+fi
+
+# Validate Git references.
+[[ $branch != -* ]] || die 'branch must not start with a dash'
+git -C "$repo_root" check-ref-format "refs/heads/$branch" >/dev/null 2>&1 || die "invalid branch name: $branch"
+
+[[ $base != -* ]] || die 'base must not start with a dash'
+git -C "$repo_root" rev-parse --verify --quiet --end-of-options "${base}^{commit}" >/dev/null || die "base does not resolve to a commit: $base"
+
+if git -C "$repo_root" show-ref --verify --quiet "refs/heads/$branch"; then
+  die "branch already exists: $branch"
+fi
+
+# Derive and secure the destination.
+slug=$(printf '%s' "$branch" | LC_ALL=C sed -e 's/[^A-Za-z0-9._-]/-/g' -e 's/^[.-]*//' -e 's/[.-]*$//')
+[[ -n "$slug" && $slug != . && $slug != .. ]] || die 'branch does not produce a safe destination name'
+
+repo_name=$(basename -- "$repo_identity_root")
+repo_slug=$(printf '%s' "$repo_name" | LC_ALL=C sed -e 's/[^A-Za-z0-9._-]/-/g' -e 's/^[.-]*//' -e 's/[.-]*$//')
+[[ -n "$repo_slug" && $repo_slug != . && $repo_slug != .. ]] || die 'repository does not produce a safe destination name'
+
+if [[ -L $WORKTREE_ROOT ]]; then
+  die "worktree root must not be a symbolic link: $WORKTREE_ROOT"
+fi
+mkdir -p -- "$WORKTREE_ROOT" || die "could not create worktree root: $WORKTREE_ROOT"
+[[ $(cd -- "$WORKTREE_ROOT" && pwd -P) == "$WORKTREE_ROOT" ]] || die 'worktree root is not canonical'
+
+repo_destination=$WORKTREE_ROOT/$repo_slug
+if [[ -L $repo_destination ]]; then
+  die "repository destination must not be a symbolic link: $repo_destination"
+fi
+repo_destination_created=false
+if [[ ! -e $repo_destination ]]; then
+  mkdir -p -- "$repo_destination" || die "could not create repository destination: $repo_destination"
+  repo_destination_created=true
+elif [[ ! -d $repo_destination ]]; then
+  die "repository destination is not a directory: $repo_destination"
+fi
+
+destination=$repo_destination/$slug
+case $destination in
+  "$WORKTREE_ROOT"/*) ;;
+  *) die 'destination escaped the worktree root' ;;
+esac
+if [[ -e $destination || -L $destination ]]; then
+  die "destination already exists: $destination"
+fi
+
+# Create the worktree and clean up on failure.
+if git -C "$repo_root" worktree add -b "$branch" "$destination" "$base"; then
+  printf '%s\n' "$destination"
+else
+  if [[ $repo_destination_created == true ]]; then
+    rmdir --ignore-fail-on-non-empty -- "$repo_destination" 2>/dev/null || true
+  fi
+  exit 1
+fi
