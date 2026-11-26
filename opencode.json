@@ -104,5 +104,10 @@
       "activation": "enabled"
     }
   },
+  "agents": {
+    "plan": {
+      "disabled": true
+    }
+  },
   "default_agent": "build"
 }

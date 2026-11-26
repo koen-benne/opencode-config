@@ -28,8 +28,8 @@ SHA-256 revision hashes. `plan-library_record` accepts only generated slugs and
 the current session context; it records an explicitly approved `create`,
 `reuse`, or `extend` subject decision and a `new` or `update` plan action.
 It never accepts filesystem paths or decides which subject matches.
-The global permission rules deny all three actions by default; Build and Plan
-may list/read, while only `plan-recorder` may record. The recorder also checks
+The global permission rules deny all three actions by default; Build may
+list/read, while only `plan-recorder` may record. The recorder also checks
 its agent identity inside the tool executor as a defence-in-depth boundary.
 
 Subject resolution is deliberately human/Sol-owned: use the list snippets and
