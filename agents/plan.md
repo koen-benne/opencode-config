@@ -1,7 +1,7 @@
 ---
 description: "Collaborative, read-only architecture planning with the human before implementation."
 mode: "primary"
-model: "bonzai-openai/gpt-5.6-sol"
+model: "bonzai-universal/gemini-4-neon"
 permissions:
   - action: "edit"
     resource: "*"
